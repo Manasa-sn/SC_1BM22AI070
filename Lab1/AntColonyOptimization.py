@@ -1,51 +1,65 @@
-# Ant Colony Optimization
-
+#ACO
 import numpy as np
 
-def objective_function(x):
-    return np.sum(x**2)
+def aco_tsp(distances, n_ants=10, n_iterations=100, alpha=1, beta=2, evaporation=0.5):
+    n_cities = len(distances)
+    pheromone = np.ones((n_cities, n_cities)) / n_cities
 
-class Ant:
-    def __init__(self, num_vars, bounds, alpha=1, beta=1):
-        self.pos = np.random.uniform(bounds[:, 0], bounds[:, 1], num_vars)
-        self.alpha = alpha
-        self.beta = beta
+    best_distance = float('inf')
+    best_tour = None
 
-    def choose_next_position(self, pheromones, bounds):
-        num_vars = len(bounds)
-        probabilities = np.zeros(num_vars)
+    for _ in range(n_iterations):
+        all_tours = []
+        all_distances = []
 
-        for i in range(num_vars):
-            eta = 1/(np.abs(self.pos[i]) + 1e-10)
-            probabilities[i] = (pheromones[i] ** self.alpha) * (eta ** self.beta)
+        # Generate tours for all ants
+        for _ in range(n_ants):
+            tour = [0]  # Start at city 0
+            unvisited = set(range(1, n_cities))
 
-        probabilities /= np.sum(probabilities)
-        next_var = np.random.choice(np.arange(num_vars), p = probabilities)
-        self.pos[next_var] = np.random.uniform(bounds[next_var, 0], bounds[next_var, 1])
-        self.pos = np.clip(self.pos, bounds[:, 0], bounds[:, 1])
+            # Construct tour
+            while unvisited:
+                current = tour[-1]
+                probs = [(pheromone[current][j] ** alpha) *
+                        ((1/distances[current][j]) ** beta)
+                        for j in unvisited]
+                probs = probs / np.sum(probs)
+                next_city = np.random.choice(list(unvisited), p=probs)
+                tour.append(next_city)
+                unvisited.remove(next_city)
 
-def ant_colony_optimization(func, bounds,num_ants=10,max_iter=100,alpha=1,beta=1,evaporation_rate=0.5):
-    num_vars = len(bounds)
-    bounds = np.array(bounds)
-    pheromones = np.ones(num_vars)
-    best_position = None
-    best_value = float('inf')
-    for _ in range(max_iter):
-        ants = [Ant(num_vars, bounds, alpha, beta ) for _ in range(num_ants)]
-        for ant in ants:
-            ant.choose_next_position(pheromones, bounds)
-            current_value = func(ant.pos)
-            if current_value < best_value:
-                best_value = current_value
-                best_position = ant.pos.copy()
-            pheromones *= (1- evaporation_rate)
-            for ant in ants:
-                pheromones += 1/(1+func(ant.pos))
+            # Calculate tour distance
+            distance = sum(distances[tour[i]][tour[i+1]]
+                         for i in range(len(tour)-1))
+            distance += distances[tour[-1]][tour[0]]  # Return to start
 
-    return best_position, best_value
+            all_tours.append(tour)
+            all_distances.append(distance)
 
-bounds = np.array([(-5, 5), (-5, 5)])
-best_pos, best_value = ant_colony_optimization(objective_function, bounds)
-print(f'Best Position: {best_pos}')
-print(f'Best Value: {best_value}')
+            # Update best tour
+            if distance < best_distance:
+                best_distance = distance
+                best_tour = tour.copy()
 
+        # Update pheromones
+        pheromone *= (1 - evaporation)  # Evaporation
+        for tour, dist in zip(all_tours, all_distances):
+            for i in range(len(tour)-1):
+                pheromone[tour[i]][tour[i+1]] += 1/dist
+            pheromone[tour[-1]][tour[0]] += 1/dist
+
+    return best_tour, best_distance
+
+# Example usage
+if __name__ == "__main__":
+    # Sample distance matrix (4 cities)
+    distances = np.array([
+        [0, 10, 15, 20],
+        [10, 0, 35, 25],
+        [15, 35, 0, 30],
+        [20, 25, 30, 0]
+    ])
+
+    tour, distance = aco_tsp(distances)
+    print(f"Best tour: {tour}")
+    print(f"Distance: {distance}")
